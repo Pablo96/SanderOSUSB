@@ -2,10 +2,12 @@
 
 extern unsigned int uhci_locs[10];
 extern unsigned int uhci_locs_cnt;
+unsigned long USBSTS;
 
+extern void ehciirq();
 void irq_ehci(){
-	printf("EHCI:           --- INTERRUPT --- \n");
-	
+	unsigned long dinges = ((unsigned long*)USBSTS)[0];
+	printf("EHCI: fire with status %x \n",dinges);
 	outportb(0x20,0x20);
 	outportb(0xA0,0x20);
 }
@@ -19,7 +21,7 @@ void ehci_init(int bus,int slot,int function){
 	unsigned long virtregaddr 	= baseaddr;
 	virtregaddr 			+= ((unsigned char*)baseaddr)[0x00];
 	unsigned long USBCMD 		= virtregaddr+0x00;
-	unsigned long USBSTS 		= virtregaddr+0x04;
+			USBSTS 		= virtregaddr+0x04;
 	unsigned long USBINTR 		= virtregaddr+0x08;
 	unsigned long FRINDEX 		= virtregaddr+0x0C;
 	unsigned long CTRLDSSEGMENT 	= virtregaddr+0x10;
@@ -27,6 +29,8 @@ void ehci_init(int bus,int slot,int function){
 	unsigned long ASYNCLISTADDR 	= virtregaddr+0x18;
 	unsigned long CONFIGFLAG 	= virtregaddr+0x40;
 	printf("EHCI: detected at addr %x !\n",baseaddr);
+	int intnummer = pciConfigReadWord ( bus, slot, function, 0x3c ) & 0xFF;
+	setNormalInt(intnummer,(unsigned long)ehciirq);
 	resetTicks();
 	((unsigned long*)USBCMD)[0] = 0x00080002;
 	while(((unsigned long*)USBCMD)[0] == 0x00080002){
@@ -34,12 +38,11 @@ void ehci_init(int bus,int slot,int function){
 			break;
 		}
 	}
-//	((unsigned long*)USBINTR)[0] = 0b0111111;
+	((unsigned long*)USBINTR)[0] = 0b0000101;
 	((unsigned long*)PERIODICLISTBASE)[0] = (unsigned long)&hqbuffer;
 	if(pciConfigReadWord(bus,slot,function,0x10)&0b110){
 		printf("EHCI: warning 64bit possible\n");
 	}
-	int intnummer = pciConfigReadWord ( bus, slot, function, 0x3c ) & 0xFF;
 	printf("EHCI: assigned int number %x \n",intnummer);
 	printf("EHCI: serial release number %x \n",pciConfigReadWord(bus,slot,function,0x60)&0xFF);
 	printf("EHCI: framelength %x \n",pciConfigReadWord(bus,slot,function,0x61)&0xFF);
@@ -86,8 +89,12 @@ void ehci_init(int bus,int slot,int function){
 				((unsigned long*)valz)[0] = dtas;
 			}
 			// wait a bit...
-			printf("PRESS KEY TO CONTINUE\n");
-			getch();
+			resetTicks();
+			while(1){
+				if(getTicks()==10){
+					break;
+				}
+			}
 			
 			// now we tell how we want things...
 			dtas = ((unsigned long*)valz)[0];
@@ -98,8 +105,12 @@ void ehci_init(int bus,int slot,int function){
 			((unsigned long*)valz)[0] = dtas;
 			
 			// wait a bit...
-			printf("PRESS KEY TO CONTINUE\n");
-			getch();
+			resetTicks();
+			while(1){
+				if(getTicks()==10){
+					break;
+				}
+			}
 			
 			// stop the reset
 			dtas = ((unsigned long*)valz)[0];
@@ -108,8 +119,12 @@ void ehci_init(int bus,int slot,int function){
 			((unsigned long*)valz)[0] = dtas;
 			
 			// wait a bit...
-			printf("PRESS KEY TO CONTINUE\n");
-			getch();
+			resetTicks();
+			while(1){
+				if(getTicks()==10){
+					break;
+				}
+			}
 			
 			dtas = ((unsigned long*)valz)[0];
 			if(dtas&1){
