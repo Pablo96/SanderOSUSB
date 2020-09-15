@@ -10,11 +10,11 @@ unsigned long charstoint(unsigned char a,unsigned char b,unsigned char c,unsigne
         return final;
 }
 
-	unsigned char pathpart[30];
-	unsigned char selfloor = 1;
-	volatile unsigned char* isobuffer = (volatile unsigned char*)0x1000;
-	unsigned long isonameloc = 0;
-	unsigned long dummy = 0;
+unsigned char pathpart[30];
+unsigned char selfloor = 1;
+volatile unsigned char* isobuffer = (volatile unsigned char*)0x1000;
+unsigned long isonameloc = 0;
+unsigned long dummy = 0;
 	
 unsigned long iso_9660_target(Device *device,char* path){
 	void* (*readraw)(Device *,unsigned long,unsigned char,unsigned short *) = (void*)device->readRawSector;

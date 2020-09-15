@@ -26,13 +26,13 @@ typedef struct fat_extBS_16{
 	unsigned int		volume_id;
 	unsigned char		volume_label[11];
 	unsigned char		fat_type_label[8];
- 
+	//  TODO boot_code (len 448B) missing
 }__attribute__((packed)) fat_extBS_16_t;
  
 typedef struct fat_BS{
 	unsigned char 		bootjmp[3];
 	unsigned char 		oem_name[8];
-	unsigned short 	        bytes_per_sector;
+	unsigned short 	    bytes_per_sector;
 	unsigned char		sectors_per_cluster;
 	unsigned short		reserved_sector_count;
 	unsigned char		table_count;
@@ -63,33 +63,48 @@ typedef struct DirectoryEntry{
 	unsigned short modifieddate; 
 	unsigned short clusterlow; // 66 13
 	unsigned long filesize;
- 
 } __attribute__ ((packed)) fat_dir_t;
 
+/* represent a function of this type generally is a referencce to this function:
+ * >> atapi_read_raw(Device *dev,unsigned long lba,unsigned char count,unsigned short *location)
+ * located in dev/AHCI.c
+ **/
+typedef void* (*ReadAHCIFunction)(Device *,unsigned long,unsigned char,unsigned short *);
+typedef void* (*WriteAHCIFunction)(Device *, unsigned long, unsigned char, unsigned short *);
+
+void fat_write(Device *device, char *path, char *buffer) {
+	// Write to disk
+	WriteAHCIFunction write_raw = (WriteAHCIFunction)device->writeRawSector;
+	
+	unsigned char bytes_count = 1;
+	unsigned long from_mem_addr = 0x1745;
+	write_raw(device, from_mem_addr, bytes_count, (unsigned short*)buffer);
+}
 
 void fat_read(Device *device,char* path,char *buffer){
-	//atapi_read_raw(Device *dev,unsigned long lba,unsigned char count,unsigned short *location)
-	void* (*readraw)(Device *,unsigned long,unsigned char,unsigned short *) = (void*)device->readRawSector;
+	ReadAHCIFunction readraw = (ReadAHCIFunction)device->readRawSector;
 	unsigned short* rxbuffer = (unsigned short*) malloc(512);
 	readraw(device,0,1,rxbuffer); 
 	fat_BS_t* fat_boot = (fat_BS_t*) rxbuffer;
 	fat_extBS_32_t* fat_boot_ext_32 = (fat_extBS_32_t*) fat_boot->extended_section;
 	
 	unsigned long total_sectors 	= (fat_boot->total_sectors_16 == 0)? fat_boot->total_sectors_32 : fat_boot->total_sectors_16;
-	unsigned long fat_size 		= (fat_boot->table_size_16 == 0)? fat_boot_ext_32->table_size_32 : fat_boot->table_size_16;
+	unsigned long fat_size 			= (fat_boot->table_size_16 == 0)? fat_boot_ext_32->table_size_32 : fat_boot->table_size_16;
 	unsigned long root_dir_sectors 	= ((fat_boot->root_entry_count * 32) + (fat_boot->bytes_per_sector - 1)) / fat_boot->bytes_per_sector;
 	unsigned long first_data_sector = fat_boot->reserved_sector_count + (fat_boot->table_count * fat_size) + root_dir_sectors;
-	unsigned long data_sectors 	= total_sectors - (fat_boot->reserved_sector_count + (fat_boot->table_count * fat_size) + root_dir_sectors);
+	unsigned long data_sectors 		= total_sectors - (fat_boot->reserved_sector_count + (fat_boot->table_count * fat_size) + root_dir_sectors);
 	unsigned long total_clusters 	= data_sectors / fat_boot->sectors_per_cluster;
 	
 	unsigned long first_sector_of_cluster = 0;
-	if(total_clusters < 4085){
-		
-	}else if(total_clusters < 65525){
+	if(total_clusters < 65525){
+		// FAT 16
 		first_sector_of_cluster = fat_boot->reserved_sector_count + (fat_boot->table_count * fat_boot->table_size_16);
-	}else if (total_clusters < 268435445){
+	} else if (total_clusters < 268435445){
+		// FAT 32
 		unsigned long root_cluster_32 = fat_boot_ext_32->root_cluster;
 		first_sector_of_cluster = ((root_cluster_32 - 2) * fat_boot->sectors_per_cluster) + first_data_sector;
+	} else {
+		// FAT type not supported
 	}
 	
 	unsigned short* fatbuffer = (unsigned short*) malloc(512);
@@ -98,14 +113,13 @@ void fat_read(Device *device,char* path,char *buffer){
 	unsigned long pathfileof = 0;
 	unsigned char filename[11];
 	
-	//
-	// pad opzoeken
+	// search for path
 	while(1){
-		// buffer leegmaken
+		// empty the buffer
 		for(int i = 0 ; i < 11 ; i++){
 			filename[i] = 0x00;
 		}
-		// buffer vullen met nieuw woord
+		// fill buffer with new word
 		unsigned char erstw = path[pathoffset];
 		if(erstw==0x00){
 			break;
@@ -128,21 +142,19 @@ void fat_read(Device *device,char* path,char *buffer){
 		while(1){
 			fat_dir_t* currentdir = (fat_dir_t*) (fatbuffer + offset);
 			offset += sizeof(fat_dir_t);
-			unsigned char eersteteken = currentdir->name[0];
-			if(eersteteken==0x00){
+			unsigned char first_char = currentdir->name[0];
+			if(first_char==0x00){
 				break;
 			}
-			if(eersteteken==0xE5){
+			if(first_char==0xE5){
 				continue;
 			}
 			unsigned long sigma = 0;
 			unsigned long yotta = 1;
 			for(int i = 0 ; i < 11 ; i++){
 				if(currentdir->name[i]!=0x00){
-					if(currentdir->name[i]==filename[sigma++]){
-						// naam (nog) hetzelfde
-					}else{
-						// naam is veranderd.
+					if(currentdir->name[i]!=filename[sigma++]){
+						// name has changed
 						yotta = 0;
 					}
 				}
@@ -166,9 +178,161 @@ void fat_read(Device *device,char* path,char *buffer){
 }
 
 
+unsigned long fat_target(Device *device,char* path){
+	ReadAHCIFunction readraw = (ReadAHCIFunction)device->readRawSector;
+	unsigned char selfloor = 1;
+
+	int pathlengte = strlen(path);
+	int paths = 1;
+	char is_bestand = 0;
+	int laatsteint = 0;
+	for(int i = 0 ; i < pathlengte ; i++){
+		if(path[i]=='/'){
+			paths++;
+			laatsteint = i+1;
+		}
+		if(path[i]=='.'){
+			isonameloc = laatsteint;
+			is_bestand = 1;
+		}
+	}
+	
+	int primairesector = 0;
+	for(int i = 0 ; i < 10 ; i++){
+		readraw(device,0x10+i,1,(unsigned short *)isobuffer);
+		if(isobuffer[0]==0x01&&isobuffer[1]=='C'&&isobuffer[2]=='D'&&isobuffer[3]=='0'&&isobuffer[4]=='0'&&isobuffer[5]=='1'){
+			primairesector = 0x10+i;
+			break;
+		}
+	}
+	
+	if(primairesector==0){
+		printf("ISO: primairy sector not found!\n");for(;;);
+	}
+	
+	unsigned long dt = charstoint(isobuffer[148],isobuffer[149],isobuffer[150],isobuffer[151]);
+	readraw(device,dt,1,(unsigned short *)isobuffer);
+	
+	unsigned long res = charstoint(isobuffer[2],isobuffer[3],isobuffer[4],isobuffer[5]);
+	if(path[0]==0){
+		return res;
+	}
+
+	char pathchunk[20];
+	int pathsel = 0; // pathchunckcount
+	int ipath = 0; // pathchunksel
+	char deze = 0;
+	int boomdiepte = 1;
+	memset(pathchunk,20,0);
+	for(int i = 0 ; i < (paths-(is_bestand?1:0)) ; i++){
+		memset(pathchunk,20,0);
+		ipath = 0;
+		kopieernogeen:
+		deze = path[pathsel++];
+		if(!(deze==0x00||deze=='/')){
+			pathchunk[ipath++] = deze;
+			goto kopieernogeen;
+		}
+		pathchunk[ipath] = 0x00;
+		//printf("Chunk [%s] word nu behandeld \n",pathchunk);
+
+		// door alle directories lopen van actuele boom
+		unsigned char entrytextlength = 0;
+		unsigned char entrytotallength = 0;
+		unsigned char entrytree = 0;
+		int entrypointer = 0;
+		int edept = 0;
+		nogmaals:
+		entrytextlength = isobuffer[entrypointer+0];
+		entrytotallength = isobuffer[entrypointer+1];
+		entrytree = isobuffer[entrypointer+7];
+		if(entrytree==boomdiepte&&entrytextlength==ipath){
+			char found = 1;
+			for(int t = 0 ; t < entrytextlength ; t++){
+				if(isobuffer[entrypointer+8+t]!=pathchunk[t]){
+					found = 0;
+				}
+			}
+			if(found){
+				boomdiepte = edept+1;
+				res = charstoint(isobuffer[entrypointer+2],isobuffer[entrypointer+3],isobuffer[entrypointer+4],isobuffer[entrypointer+5]);
+				selfloor = boomdiepte;
+				if((paths-(is_bestand?1:0))==(i+1)){
+					dummy = res;
+					return res;
+				}
+				continue;
+			}
+		}
+		int z = entrytextlength+entrytotallength+8;
+		if(z%2!=0){
+			z++;
+		}
+		entrypointer += z;
+		edept++;
+		goto nogmaals;
+	}
+	return res;
+}
+
+
+/**
+ * Returns true(1) if the given directory (path) exists in the device, false(0) otherwise
+ */
+char fat_exists(Device *device,char* path){
+	static unsigned long dummy = 0;
+	ReadAHCIFunction readraw = (ReadAHCIFunction)device->readRawSector;
+	
+
+	int target = fat_target(device,path);
+	target = dummy;
+	if(target!=0){
+		int i = 0;
+		int gz = 0;
+		readraw(device,target,1,(unsigned short *)isobuffer);
+		int ctx = 0;
+		for(int i = 0 ; i< strlen(path) ; i++){
+			if(path[i]=='/'){
+				ctx = i+1;
+			}
+		}
+		unsigned char* fname = (unsigned char*)(path+ctx);
+		for(i = 0 ; i < 1000 ; i++){
+			int t = 2;
+			if(isobuffer[i]==';'&&isobuffer[i+1]=='1'){
+				int fnd = 0;
+				for(int z = 1 ; z < 30 ; z++){
+					if(isobuffer[i-z]==t){
+						fnd = z;
+						break;
+					}
+					t++;
+				}
+				if(fnd){
+					//t -= 2;
+					int w = 0;
+					gz = 1;
+					for(int z = 2 ; z < t ; z++){
+						if(fname[w++]!=isobuffer[(i-t)+z]){
+							gz = 0;
+						}
+					}
+					if(gz){
+						return 1;
+					}
+				}
+			}
+		}
+	}
+	return 0;
+}
+
+/**
+ * Retrieve the files list in the given directory(path)
+ * of the device and put it in buffer separated by ';'
+ **/
 void fat_dir(Device *device,char* path,char *buffer){
-	//atapi_read_raw(Device *dev,unsigned long lba,unsigned char count,unsigned short *location)
-	void* (*readraw)(Device *,unsigned long,unsigned char,unsigned short *) = (void*)device->readRawSector;
+	ReadAHCIFunction readraw = (ReadAHCIFunction)device->readRawSector;
 	unsigned short* rxbuffer = (unsigned short*) malloc(512);
 	readraw(device,0,1,rxbuffer); 
 	fat_BS_t* fat_boot = (fat_BS_t*) rxbuffer;
@@ -286,7 +450,7 @@ void fat_dir(Device *device,char* path,char *buffer){
 }
 
 void initialiseFAT(Device* device){
-	void* (*readraw)(Device *,unsigned long,unsigned char,unsigned short *) = (void*)device->readRawSector;
+	ReadAHCIFunction readraw = (ReadAHCIFunction)device->readRawSector;
 	unsigned short* buffer = (unsigned short*) malloc(512);
 	readraw(device,0,1,buffer); 
 	fat_BS_t* fat_boot = (fat_BS_t*) buffer;
@@ -351,4 +515,5 @@ void initialiseFAT(Device* device){
 	}
 	device->dir	= (unsigned long)&fat_dir;
 	device->readFile= (unsigned long)&fat_read;
+	device->writeFile= (unsigned long)&fat_write;
 }
