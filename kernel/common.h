@@ -1,0 +1,3 @@
+#pragma once
+#define MAX_UNSIGNED_SHORT 65535
+#define MAX_UNSIGNED_LONG 268435456

@@ -666,11 +666,11 @@ int ahci_ata_read(HBA_PORT *port, unsigned long startl, unsigned long starth, un
 	return 1;
 }
 
-void ahci_ata_read_ext(Device *dev,unsigned long lba,unsigned char count,unsigned short *location){
+void ahci_ata_read_ext(Device *dev,unsigned long lba,unsigned long count,unsigned short *location){
 	ahci_ata_read((HBA_PORT *)dev->arg1, dev->arg2+lba, 0, count, location);
 }
 
-void ahci_atapi_read_ext(Device *dev,unsigned long lba,unsigned char count,unsigned short *location){
+void ahci_atapi_read_ext(Device *dev,unsigned long lba,unsigned long count,unsigned short *location){
 	ahci_atapi_read((HBA_PORT *)dev->arg1, lba, 0, count, location);
 }
 

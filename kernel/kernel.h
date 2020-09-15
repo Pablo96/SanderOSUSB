@@ -1,4 +1,6 @@
+#pragma once
 #include "stdarg.h"
+#include "common.h"
 #define ATAPI_SECTOR_SIZE 2048
 
 /**
