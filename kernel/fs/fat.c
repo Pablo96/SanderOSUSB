@@ -122,7 +122,7 @@ fat_BS_t* fat_first_sectors(Device *device, unsigned long *cluster_sector, unsig
  * Set entry to pointer to the entry/cluster
  * Set entry_sector to point to the entry/cluster sector
  */
-char fat_exists(Device *device,char *path, unsigned long *entry_sector, unsigned short **entry){
+char fat_exists(Device *device,char *path, unsigned long *entry_sector, unsigned short **entry) {
 	ReadAHCIFunction readraw = (ReadAHCIFunction)device->readRawSector;
 	
 	unsigned long first_sector_of_cluster, first_data_sector;
@@ -209,9 +209,25 @@ char fat_exists(Device *device,char *path, unsigned long *entry_sector, unsigned
 	return 1;
 }
 
+char fat_exists_file(Device *device,char *path) {
+	return fat_exists(device, path, 0, 0);
+}
+
 void fat_write(Device *device, char *path, char *buffer, unsigned long buffer_size) {
+	unsigned long entry_sector = 0;
+	unsigned short *fatbuffer = 0;
+	if (!fat_exists(device, path, &entry_sector, &fatbuffer)) {
+		printf("CANNOT FIND DIR\n");
+		for(;;);
 	}
+
+	// Write to disk
+	WriteAHCIFunction write_raw = (WriteAHCIFunction)device->writeRawSector;
+	fat_dir_t *file =  (fat_dir_t*) fatbuffer;
+	if (buffer_size > file->filesize) {
 		// fragment the file.
+	} else {
+		write_raw(device, entry_sector, buffer_size, (unsigned short*)buffer);
 	}
 }
 

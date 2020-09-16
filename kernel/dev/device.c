@@ -85,7 +85,7 @@ int fread(char* path,unsigned char* buffer){
 	return 0;
 }
 
-int fwrite(char* path,unsigned char* buffer,unsigned long filesize){
+int fwrite(char* path, unsigned char* buffer, unsigned long filesize){
 	if(path[1]=='@'){
 		int z = path[0] - 'A';
 		if(devices[z].writeFile==0){
