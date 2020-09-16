@@ -221,13 +221,15 @@ void fat_write(Device *device, char *path, char *buffer, unsigned long buffer_si
 		for(;;);
 	}
 
+	unsigned long sector_count = (buffer_size + BLOCK_SIZE - buffer_size % BLOCK_SIZE) / BLOCK_SIZE;
+
 	// Write to disk
 	WriteAHCIFunction write_raw = (WriteAHCIFunction)device->writeRawSector;
-	fat_dir_t *file =  (fat_dir_t*) fatbuffer;
-	if (buffer_size > file->filesize) {
-		// fragment the file.
+	fat_dir_t *entry =  (fat_dir_t*) fatbuffer;
+	if (buffer_size <= entry->filesize) {
+		write_raw(device, entry_sector, sector_count, (unsigned short*)buffer);
 	} else {
-		write_raw(device, entry_sector, buffer_size, (unsigned short*)buffer);
+		// fragment the file.
 	}
 }
 
