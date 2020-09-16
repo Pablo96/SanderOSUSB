@@ -135,9 +135,9 @@ char fat_exists(Device *device,char *path, unsigned long *entry_sector, unsigned
 	unsigned long pathfileof = 0;
 	unsigned char filename[11];
 	
-	// search for path
+	//
 	while(1){
-		// empty the buffer
+		// clear buffer
 		for(int i = 0 ; i < 11 ; i++){
 			filename[i] = 0x00;
 		}
@@ -181,7 +181,6 @@ char fat_exists(Device *device,char *path, unsigned long *entry_sector, unsigned
 			for(int i = 0 ; i < 11 ; i++){
 				if(currentdir->name[i]!=0x00){
 					if(currentdir->name[i] != filename[sigma++]){
-						// name has changed
 						yotta = 0;
 					}
 				}
@@ -210,25 +209,9 @@ char fat_exists(Device *device,char *path, unsigned long *entry_sector, unsigned
 	return 1;
 }
 
-char fat_exists_file(Device *device,char *path) {
-  	return fat_exists(device,path, 0, 0);
-}
-
 void fat_write(Device *device, char *path, char *buffer, unsigned long buffer_size) {
-	unsigned long entry_sector = 0;
-	unsigned short *fatbuffer = 0;
-	if (!fat_exists(device, path, &entry_sector, &fatbuffer)) {
-		printf("CANNOT FIND DIR\n");
-		for(;;);
 	}
-
-	// Write to disk
-	WriteAHCIFunction write_raw = (WriteAHCIFunction)device->writeRawSector;
-	fat_dir_t *file =  (fat_dir_t*) fatbuffer;
-	if (buffer_size > file->filesize) {
 		// fragment the file.
-	} else {
-		write_raw(device, entry_sector, buffer_size, (unsigned short*)buffer);
 	}
 }
 
@@ -256,7 +239,7 @@ void fat_dir(Device *device,char* path,char *buffer){
 	}
 
 	//
-	// bestanden printen
+	// print files
 	unsigned long offset = 0;
 	unsigned long bufofs = 0;
 	while(1){
