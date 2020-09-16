@@ -210,6 +210,10 @@ char fat_exists(Device *device,char *path, unsigned long *entry_sector, unsigned
 	return 1;
 }
 
+char fat_exists_file(Device *device,char *path) {
+  	return fat_exists(device,path, 0, 0);
+}
+
 void fat_write(Device *device, char *path, char *buffer, unsigned long buffer_size) {
 	unsigned long entry_sector = 0;
 	unsigned short *fatbuffer = 0;
@@ -342,6 +346,7 @@ void initialiseFAT(Device* device){
 	device->dir		 	= (unsigned long)&fat_dir;
 	device->readFile 	= (unsigned long)&fat_read;
 	device->writeFile 	= (unsigned long)&fat_write;
+	device->existsFile	= (unsigned long)&fat_exists_file;
 }
 
 #undef BLOCK_SIZE
